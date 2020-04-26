@@ -20,6 +20,7 @@ def check_log_size(log, increased=False):
     def deco(func):
         log_map = {"error": ERROR_LOG_FILE, "good": GOOD_LOG_FILE, "csv": CSV_PATH}
         log_path = log_map.get(log, log)
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             log_len = get_len(log_path)
@@ -27,7 +28,9 @@ def check_log_size(log, increased=False):
             new_len = get_len(log_path)
             assert new_len > log_len if increased else new_len == log_len, f"Wrong {log} file length"
             return result
+
         return wrapper
+
     return deco
 
 
@@ -102,11 +105,11 @@ def test_creation_acceptable_driver_license(driver_license):
 @check_log_size("error", increased=True)
 @check_log_size("good")
 def test_creation_wrong_type_params(i):
-        try:
-            Patient(*GOOD_PARAMS[:i], 1.8, *GOOD_PARAMS[i+1:])
-            assert False, f"TypeError for {PATIENT_FIELDS[i]} not invoked"
-        except TypeError:
-            assert True
+    try:
+        Patient(*GOOD_PARAMS[:i], 1.8, *GOOD_PARAMS[i + 1:])
+        assert False, f"TypeError for {PATIENT_FIELDS[i]} not invoked"
+    except TypeError:
+        assert True
 
 
 # неверные значения
@@ -115,7 +118,7 @@ def test_creation_wrong_type_params(i):
 @check_log_size("good")
 def test_creation_wrong_params(i):
     try:
-        Patient(*GOOD_PARAMS[:i], WRONG_PARAMS[i], *GOOD_PARAMS[i+1:])
+        Patient(*GOOD_PARAMS[:i], WRONG_PARAMS[i], *GOOD_PARAMS[i + 1:])
         assert False, f"ValueError for {PATIENT_FIELDS[i]} not invoked"
     except ValueError:
         assert True
@@ -155,7 +158,8 @@ def test_names_assignment(patient, field, param):
 @check_log_size("good", increased=True)
 def test_good_params_assignment(patient, field, param):
     setattr(patient, field, param)
-    assert getattr(patient, field) == param, f"Attribute {field} did not change"
+    assert getattr(patient, field) == param or getattr(patient, field) == datetime(1978, 1, 31), \
+        f"Attribute {field} did not change"
 
 
 @pytest.mark.parametrize("patient,field,param", zip(
