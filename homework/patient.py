@@ -3,7 +3,7 @@ from dateutil.parser import parse
 import regex as re
 import logging
 import os
-from homework.logger import logger_error, logger_info
+from homework.logger import logger_error, logger_info, handler, handler_error
 
 from homework.config import PHONE_FORMAT, DRIVER_LICENSE_TYPE, DRIVER_LICENSE_FORMAT, PASSPORT_TYPE
 
@@ -183,13 +183,6 @@ class DocDescriptor(BaseDescriptor):
         return True
 
 
-def setup_handler(path):
-    handler = logging.FileHandler(path, 'a', 'utf-8')
-    formatter = logging.Formatter("%(filename)s[LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s")
-    handler.setFormatter(formatter)
-    return handler
-
-
 class Patient:
     """
         Объект хранит информацию о пациенте
@@ -229,11 +222,6 @@ class Patient:
                  phone, document_type, document_id: str,
                  created=None):
 
-        self.handler = setup_handler("info.txt")
-        self.logger_info.addHandler(self.handler)
-        self.handler_error = setup_handler("errors.txt")
-        self.logger_error.addHandler(self.handler_error)
-
         self.exists = False
         self.first_name = first_name
         self.last_name = last_name
@@ -262,11 +250,8 @@ class Patient:
 
     def __del__(self):
 
-        for info_handler in self.logger_info.handlers:
-            info_handler.close()
-
-        for error_handler in self.logger_error.handlers:
-            error_handler.close()
+        handler.close()
+        handler_error.close()
 
 
 class CollectionIterator:
@@ -295,6 +280,9 @@ class CollectionIterator:
             return True
         else:
             return False
+
+    def __del__(self):
+        self.collection.close()
 
 
 class PatientCollection:
