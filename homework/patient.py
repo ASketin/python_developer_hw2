@@ -221,7 +221,6 @@ class Patient:
     def __init__(self, first_name, last_name, birth_date,
                  phone, document_type, document_id: str,
                  created=None):
-
         self.exists = False
         self.first_name = first_name
         self.last_name = last_name
@@ -236,10 +235,9 @@ class Patient:
     @staticmethod
     def create(first_name, last_name, birth_date, phone,
                document_type, document_id):
-        patient = Patient(first_name, last_name, birth_date, phone,
-                          document_type, document_id, created=True)
-        patient.logger_info.info(f"{first_name} {last_name} was created")
-        return patient
+        logger_info.info(f"{first_name} {last_name} was created")
+        return Patient(first_name, last_name, birth_date, phone,
+                       document_type, document_id, created=True)
 
     def save(self):
         data = [self.first_name, self.last_name, self.birth_date,
@@ -249,7 +247,6 @@ class Patient:
             self.logger_info.info(f"patient was saved")
 
     def __del__(self):
-
         handler.close()
         handler_error.close()
 
