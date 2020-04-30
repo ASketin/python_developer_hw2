@@ -87,9 +87,10 @@ class DateDescriptor(BaseDescriptor):
         self.check_type(value)
         if self.check_date(value):
             tmp = parse(value)
-            instance.__dict__[self.name] = tmp
-            if instance.exists:
+            if self.name in instance.__dict__:
                 logger_info.info(f"Date was changed ")
+            instance.__dict__[self.name] = tmp
+
         else:
             logger_error.error(f"Invalid date: {value}")
             raise ValueError("input not str type")
@@ -113,9 +114,9 @@ class PhoneDescriptor(BaseDescriptor):
         self.check_type(value)
         number, status = self.check_phone(value)
         if status:
-            instance.__dict__[self.name] = number
-            if instance.exists:
+            if self.name in instance.__dict__:
                 logger_info.info("Phone was changed")
+            instance.__dict__[self.name] = number
         else:
             logger_error.error(f"Invalid number: {value}")
             raise ValueError("Invalid number")
@@ -146,11 +147,9 @@ class DocDescriptor(BaseDescriptor):
             self.check_type(value)
             res, status = self.check_id(value, DOC_TYPE[instance.document_type])
             if status:
-                instance.__dict__[self.name] = res
-                if not instance.exists:
-                    instance.exists = True
-                else:
+                if self.name in instance.__dict__:
                     logger_info.info("ID was changed")
+                instance.__dict__[self.name] = res
             else:
                 logger_error.error(f"Invalid id: {value}")
                 raise ValueError("Invalid ID")
@@ -158,9 +157,9 @@ class DocDescriptor(BaseDescriptor):
         elif self.name == "document_type":
             self.check_type(value)
             if self.check_doc(value):
-                instance.__dict__[self.name] = value
-                if instance.exists:
+                if self.name in instance.__dict__:
                     logger_info.info("Type was changed")
+                instance.__dict__[self.name] = value
             else:
                 logger_error.error(f"Invalid document: {value}")
                 raise ValueError("Invalid document")
@@ -220,7 +219,6 @@ class Patient:
     def __init__(self, first_name, last_name, birth_date,
                  phone, document_type, document_id: str,
                  created=None):
-        self.exists = False
         self.first_name = first_name
         self.last_name = last_name
         self.birth_date = birth_date
