@@ -36,9 +36,9 @@ class BaseDescriptor(ABC):
         return instance.__dict__[self.name]
 
     @staticmethod
-    def check_type(instance, value):
+    def check_type(value):
         if not isinstance(value, str):
-            instance.logger_error.error(f"Invalid type")
+            logger_error.error(f"Invalid type")
             raise TypeError("Not string")
 
     @abstractmethod
@@ -57,15 +57,15 @@ class StringDescriptor(BaseDescriptor):
     """
 
     def __set__(self, instance, value):
-        self.check_type(instance, value)
+        self.check_type(value)
         if self.check_name(value):
             if self.name not in instance.__dict__:
                 instance.__dict__[self.name] = value
             else:
-                instance.logger_error.error(f"Changes Forbidden")
+                logger_error.error(f"Changes Forbidden")
                 raise AttributeError("Changes Forbidden")
         else:
-            instance.logger_error.error(f"Incorrect Name/Surname {value}")
+            logger_error.error(f"Incorrect Name/Surname {value}")
             raise ValueError("Incorrect Name/Surname")
 
     @staticmethod
@@ -84,14 +84,14 @@ class DateDescriptor(BaseDescriptor):
     """
 
     def __set__(self, instance, value):
-        self.check_type(instance, value)
+        self.check_type(value)
         if self.check_date(value):
             tmp = parse(value)
             instance.__dict__[self.name] = tmp
             if instance.exists:
-                instance.logger_info.info(f"Date was changed ")
+                logger_info.info(f"Date was changed ")
         else:
-            instance.logger_error.error(f"Invalid date: {value}")
+            logger_error.error(f"Invalid date: {value}")
             raise ValueError("input not str type")
 
     @staticmethod
@@ -110,15 +110,14 @@ class PhoneDescriptor(BaseDescriptor):
     """
 
     def __set__(self, instance, value):
-        self.check_type(instance, value)
+        self.check_type(value)
         number, status = self.check_phone(value)
         if status:
             instance.__dict__[self.name] = number
             if instance.exists:
-                instance.logger_info.info("Phone was changed")
-                del instance
+                logger_info.info("Phone was changed")
         else:
-            instance.logger_error.error(f"Invalid number: {value}")
+            logger_error.error(f"Invalid number: {value}")
             raise ValueError("Invalid number")
 
     @staticmethod
@@ -144,26 +143,26 @@ class DocDescriptor(BaseDescriptor):
     def __set__(self, instance, value):
 
         if self.name == "document_id":
-            self.check_type(instance, value)
+            self.check_type(value)
             res, status = self.check_id(value, DOC_TYPE[instance.document_type])
             if status:
                 instance.__dict__[self.name] = res
                 if not instance.exists:
                     instance.exists = True
                 else:
-                    instance.logger_info.info("ID was changed")
+                    logger_info.info("ID was changed")
             else:
-                instance.logger_error.error(f"Invalid id: {value}")
+                logger_error.error(f"Invalid id: {value}")
                 raise ValueError("Invalid ID")
 
         elif self.name == "document_type":
-            self.check_type(instance, value)
+            self.check_type(value)
             if self.check_doc(value):
                 instance.__dict__[self.name] = value
                 if instance.exists:
-                    instance.logger_info.info("Type was changed")
+                    logger_info.info("Type was changed")
             else:
-                instance.logger_error.error(f"Invalid document: {value}")
+                logger_error.error(f"Invalid document: {value}")
                 raise ValueError("Invalid document")
 
     @staticmethod
@@ -230,7 +229,7 @@ class Patient:
         self.document_id = document_id
 
         if not created:
-            self.logger_info.info(f"{first_name} {last_name} was written")
+            logger_info.info(f"{first_name} {last_name} was written")
 
     @staticmethod
     def create(first_name, last_name, birth_date, phone,
@@ -244,7 +243,7 @@ class Patient:
                 self.phone, self.document_type, self.document_id]
         with open("table.csv", "a", encoding="utf-8") as table:
             table.write(u",".join(map(str, data)) + u"\n")
-            self.logger_info.info(f"patient was saved")
+            logger_info.info(f"patient was saved")
 
     def __del__(self):
         handler.close()
