@@ -80,7 +80,7 @@ class StringDescriptor(BaseDescriptor):
 class DateDescriptor(BaseDescriptor):
     """
        Дата имеет тип datetime.
-       Исключения логгируем в exceptions
+       Исключения логгируем в errors
     """
 
     def __set__(self, instance, value):
@@ -181,6 +181,14 @@ class DocDescriptor(BaseDescriptor):
         return True
 
 
+def my_logging_decorator(method):
+    def method_wrapper(*args):
+        result = method(*args)
+        logger_info.info(f"Patient was {method.__name__}")
+        return result
+    return method_wrapper
+
+
 class Patient:
     """
         Объект хранит информацию о пациенте
@@ -216,9 +224,9 @@ class Patient:
     logger_info = logging.getLogger("Patient")
     logger_error = logging.getLogger("Error")
 
+    @my_logging_decorator
     def __init__(self, first_name, last_name, birth_date,
-                 phone, document_type, document_id: str,
-                 created=None):
+                 phone, document_type, document_id: str):
         self.first_name = first_name
         self.last_name = last_name
         self.birth_date = birth_date
@@ -226,22 +234,19 @@ class Patient:
         self.document_type = document_type
         self.document_id = document_id
 
-        if not created:
-            logger_info.info(f"{first_name} {last_name} was written")
 
     @staticmethod
     def create(first_name, last_name, birth_date, phone,
                document_type, document_id):
-        logger_info.info(f"{first_name} {last_name} was created")
         return Patient(first_name, last_name, birth_date, phone,
-                       document_type, document_id, created=True)
+                       document_type, document_id)
 
+    @my_logging_decorator
     def save(self):
         data = [self.first_name, self.last_name, self.birth_date,
                 self.phone, self.document_type, self.document_id]
         with open("table.csv", "a", encoding="utf-8") as table:
             table.write(u",".join(map(str, data)) + u"\n")
-            logger_info.info(f"patient was saved")
 
     def __del__(self):
         handler.close()
