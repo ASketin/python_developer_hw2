@@ -1,14 +1,17 @@
 from abc import ABC, abstractmethod
+
+import psycopg2
 from dateutil.parser import parse
 import regex as re
 import logging
-import os
 from homework.logger import logger_error, logger_info, handler, handler_error
+from homework.db_config import config
 
-from homework.config import PHONE_FORMAT, DRIVER_LICENSE_TYPE, DRIVER_LICENSE_FORMAT, PASSPORT_TYPE
 
 # лучше вместо глобальных констант, создать структуры с интерфейсом
 # обновления элементов и форматов
+from tests.constants import PATIENT_FIELDS
+
 OPERATORS_CODE = {900, 901, 902, 903, 904, 905, 906, 908, 909, 910,
                   911, 912, 913, 914, 915, 916, 917, 918, 919, 920,
                   921, 922, 923, 924, 925, 926, 927, 928, 929, 930,
@@ -23,22 +26,66 @@ DOC_TYPE = {"паспорт": 10, "заграничный паспорт": 9,
 INAPROPRIATE_SYMBOLS = r"[a-zA-Z\u0400-\u04FF.!@?#$%&:;*\,\;\=[\\\]\^_{|}<>]"
 
 
+def my_logging_decorator(method):
+    def method_wrapper(*args):
+
+        exist = False
+        result = None
+
+        if method.__name__ == "__set__":
+            if args[0]._name in args[1].__dict__:
+                exist = True
+
+        if method.__name__ == "__init__":
+            result = method(*args)
+            logger_info.info(f"Patient was {method.__name__}")
+
+        else:
+            try:
+                result = method(*args)
+                if exist:
+                    logger_info.info(f"{args[0]._name} was changed")
+                if method.__name__ == "save":
+                    logger_info.info(f"Patient was {method.__name__}")
+            except (TypeError, ValueError, AttributeError, psycopg2.DatabaseError,
+                    Exception) as e:
+                logger_error.error(e)
+                raise e
+
+        return result
+
+    return method_wrapper
+
+
+def db_request(request, amount=None, db="patients"):
+    params = config()
+    params["database"] = db
+    conn = psycopg2.connect(**params)
+    cur = conn.cursor()
+    cur.execute(request)
+    result = None
+    if amount is not None:
+        result = cur.fetchone() if amount == "one" else cur.fetchall()
+    conn.commit()
+    cur.close()
+    return result
+
+
 class BaseDescriptor(ABC):
     """
         Базовый дескриптор
     """
 
     def __set_name__(self, owner, name):
-        self.name = name
-        self.value = None
+        self._name = name
+        self._value = None
 
     def __get__(self, instance, owner):
-        return instance.__dict__[self.name]
+        return instance.__dict__[self._name]
 
     @staticmethod
     def check_type(value):
         if not isinstance(value, str):
-            logger_error.error(f"Invalid type")
             raise TypeError("Not string")
 
     @abstractmethod
@@ -51,27 +98,26 @@ class StringDescriptor(BaseDescriptor):
         Дескриптор данных для first_name, last_name.
         В случае некорректного формата данных выбрасвает
         ошибку ValueError, все ошибки логируются в errors.
+        Изменение имени после инициализация объекта запре-
+        щено.
 
         Формат имени предполагает отсутствие цифр и небуквенных
-        символов, количество уникальнх символов > 2
+        символов
     """
 
+    @my_logging_decorator
     def __set__(self, instance, value):
         self.check_type(value)
         if self.check_name(value):
-            if self.name not in instance.__dict__:
-                instance.__dict__[self.name] = value
+            if self._name not in instance.__dict__:
+                instance.__dict__[self._name] = value
             else:
-                logger_error.error(f"Changes Forbidden")
                 raise AttributeError("Changes Forbidden")
         else:
-            logger_error.error(f"Incorrect Name/Surname {value}")
             raise ValueError("Incorrect Name/Surname")
 
     @staticmethod
     def check_name(value):
-        if len(set(value)) < 2:
-            return False
         if not value.isalpha():
             return False
         return True
@@ -83,16 +129,14 @@ class DateDescriptor(BaseDescriptor):
        Исключения логгируем в errors
     """
 
+    @my_logging_decorator
     def __set__(self, instance, value):
         self.check_type(value)
         if self.check_date(value):
             tmp = parse(value)
-            if self.name in instance.__dict__:
-                logger_info.info(f"Date was changed ")
-            instance.__dict__[self.name] = tmp
+            instance.__dict__[self._name] = tmp
 
         else:
-            logger_error.error(f"Invalid date: {value}")
             raise ValueError("input not str type")
 
     @staticmethod
@@ -110,15 +154,12 @@ class PhoneDescriptor(BaseDescriptor):
         Исключения логгируем в errors
     """
 
+    @my_logging_decorator
     def __set__(self, instance, value):
-        self.check_type(value)
-        number, status = self.check_phone(value)
-        if status:
-            if self.name in instance.__dict__:
-                logger_info.info("Phone was changed")
-            instance.__dict__[self.name] = number
+        number = self.check_phone(value)
+        if number is not None:
+            instance.__dict__[self._name] = number
         else:
-            logger_error.error(f"Invalid number: {value}")
             raise ValueError("Invalid number")
 
     @staticmethod
@@ -127,12 +168,12 @@ class PhoneDescriptor(BaseDescriptor):
         res = "8"
         res += ''.join(parsed_num)[1:]
         if len(res) != 11:
-            return None, False
+            return None
         if int(res[1:4]) not in OPERATORS_CODE:
-            return None, False
+            return None
         if re.search(INAPROPRIATE_SYMBOLS, number) is not None:
-            return None, False
-        return res, True
+            return None
+        return res
 
 
 class DocDescriptor(BaseDescriptor):
@@ -141,27 +182,20 @@ class DocDescriptor(BaseDescriptor):
         Содержит проверку для обоих полей
     """
 
+    @my_logging_decorator
     def __set__(self, instance, value):
 
-        if self.name == "document_id":
-            self.check_type(value)
-            res, status = self.check_id(value, DOC_TYPE[instance.document_type])
-            if status:
-                if self.name in instance.__dict__:
-                    logger_info.info("ID was changed")
-                instance.__dict__[self.name] = res
+        if self._name == "document_id":
+            res = self.check_id(value, DOC_TYPE[instance.document_type])
+            if res is not None:
+                instance.__dict__[self._name] = res
             else:
-                logger_error.error(f"Invalid id: {value}")
                 raise ValueError("Invalid ID")
 
-        elif self.name == "document_type":
-            self.check_type(value)
+        elif self._name == "document_type":
             if self.check_doc(value):
-                if self.name in instance.__dict__:
-                    logger_info.info("Type was changed")
-                instance.__dict__[self.name] = value
+                instance.__dict__[self._name] = value
             else:
-                logger_error.error(f"Invalid document: {value}")
                 raise ValueError("Invalid document")
 
     @staticmethod
@@ -169,24 +203,16 @@ class DocDescriptor(BaseDescriptor):
         parsed_num = re.findall(r"\d+", number)
         res = ''.join(parsed_num)
         if len(res) != fix_size:
-            return None, False
+            return None
         if re.search(INAPROPRIATE_SYMBOLS, number) is not None:
-            return None, False
-        return res, True
+            return None
+        return res
 
     @staticmethod
     def check_doc(doc_type):
         if str.lower(doc_type) not in DOC_TYPE:
             return False
         return True
-
-
-def my_logging_decorator(method):
-    def method_wrapper(*args):
-        result = method(*args)
-        logger_info.info(f"Patient was {method.__name__}")
-        return result
-    return method_wrapper
 
 
 class Patient:
@@ -199,9 +225,7 @@ class Patient:
         : номер телефона(string) - соответствие формату,хранение в
             виде 8xxxxxxxxxxx
         : тип документа(string) - ограниченный набор(паспорт,
-            удостоверения, прочее), надо реализовать метод
-            добавления нового документа карантинного пропуска к
-            примеру
+            удостоверения, прочее)
         : номер документа(string) - проверять на соответствие
             номера формату документа
 
@@ -210,8 +234,8 @@ class Patient:
         Исключения, случившиеся при работе,
             в лог errors
 
-        Хранить пациента нужно в csv, у класса
-        есть метод save для дозаписи в файл
+        Пациент хранится в БД Postgres.Поля database и table
+        указывают на необходимую таблицу.
     """
 
     first_name = StringDescriptor()
@@ -224,6 +248,9 @@ class Patient:
     logger_info = logging.getLogger("Patient")
     logger_error = logging.getLogger("Error")
 
+    database = "patients"
+    table = "ill_patients"
+
     @my_logging_decorator
     def __init__(self, first_name, last_name, birth_date,
                  phone, document_type, document_id: str):
@@ -234,7 +261,6 @@ class Patient:
         self.document_type = document_type
         self.document_id = document_id
 
-
     @staticmethod
     def create(first_name, last_name, birth_date, phone,
                document_type, document_id):
@@ -243,10 +269,10 @@ class Patient:
 
     @my_logging_decorator
     def save(self):
-        data = [self.first_name, self.last_name, self.birth_date,
+        data = [self.first_name, self.last_name, self.birth_date.date(),
                 self.phone, self.document_type, self.document_id]
-        with open("table.csv", "a", encoding="utf-8") as table:
-            table.write(u",".join(map(str, data)) + u"\n")
+        data = str(tuple(map(str, data)))[1:-1]
+        db_request(f"insert into {self.table} values (DEFAULT, {data})")
 
     def __del__(self):
         handler.close()
@@ -255,46 +281,49 @@ class Patient:
 
 class CollectionIterator:
 
-    def __init__(self, path, limit=None):
-        self.collection = open(path, "r", encoding="utf-8")
-        self.limit = limit
-        self.line = 0
+    def __init__(self, table, limit=None):
+        self.table = table
+        first_index = db_request(f"select Min(id) from {self.table}", "one")
+        self.line = 0 if first_index[0] is None else int(first_index[0])
+        self.limit = None if limit is None \
+            else self.line + limit
 
     def __iter__(self):
         return self
 
     def __next__(self):
         if self.has_more():
-            params = self.collection.readline()
+            result = db_request(f"select * from {self.table} where id = {self.line}",
+                                "one")
             self.line += 1
-            return Patient(*params.split(","))
+            return Patient(*result[1:])
         else:
             raise StopIteration()
 
     def has_more(self):
-        if self.line == self.limit:
+        last_index = db_request(f"select Max(id) from {self.table}", "one")
+        if last_index[0] is None or self.line > last_index[0]:
             return False
-        if self.collection.tell() != os.fstat(
-                self.collection.fileno()).st_size:
-            return True
-        else:
+        if self.limit is not None and self.line >= self.limit:
             return False
-
-    def __del__(self):
-        self.collection.close()
+        return True
 
 
 class PatientCollection:
-    """Берет данные из csv файла, поддерживает итерацию
-       ссодержит метод limit, возвращаюший итератор/генератор
-       первых n записей
+    """
+        Берет данные из БД Postgres, поддерживает итерацию
+        содержит метод limit, возвращаюший итератор/генератор
+        первых n записей.В поле self.table указывают необходимую
+        таблицу.
     """
 
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, table):
+        self.table = table
 
+    @my_logging_decorator
     def __iter__(self):
-        return CollectionIterator(self.path)
+        return CollectionIterator(self.table)
 
+    @my_logging_decorator
     def limit(self, n):
-        return CollectionIterator(self.path, n)
+        return CollectionIterator(self.table, n)

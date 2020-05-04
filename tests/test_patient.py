@@ -2,12 +2,11 @@ import functools
 import os
 from datetime import datetime
 import itertools
-
 import pytest
 
 from homework.config import GOOD_LOG_FILE, ERROR_LOG_FILE, CSV_PATH, PHONE_FORMAT, PASSPORT_TYPE, PASSPORT_FORMAT, \
     INTERNATIONAL_PASSPORT_FORMAT, INTERNATIONAL_PASSPORT_TYPE, DRIVER_LICENSE_TYPE, DRIVER_LICENSE_FORMAT
-from homework.patient import Patient
+from homework.patient import Patient, db_request
 from tests.constants import GOOD_PARAMS, OTHER_GOOD_PARAMS, WRONG_PARAMS, PATIENT_FIELDS
 
 
@@ -42,6 +41,7 @@ def setup_module(__main__):
 
 def teardown_module(__name__):
     for file in [GOOD_LOG_FILE, ERROR_LOG_FILE, CSV_PATH]:
+        db_request("truncate ill_patients")
         os.remove(file)
 
 
@@ -193,7 +193,7 @@ def test_wrong_value_assignment(patient, field, param):
 
 
 # метод save
-@check_log_size("csv", increased=True)
+@check_log_size("good", increased=True)
 def test_save():
     patient = Patient(*GOOD_PARAMS)
     patient.save()

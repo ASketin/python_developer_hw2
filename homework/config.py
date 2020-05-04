@@ -1,6 +1,7 @@
 GOOD_LOG_FILE = "info.txt"
 ERROR_LOG_FILE = "errors.txt"
 CSV_PATH = "table.csv"
+TABLE = "ill_patients"
 PHONE_FORMAT = "89160000000"  # Здесь запишите телефон +7-916-000-00-00 в том формате, в котором вы храните телефоны
 
 PASSPORT_TYPE = "паспорт"  # тип документа, когда он паспорт

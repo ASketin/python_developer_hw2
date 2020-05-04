@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from homework.config import PASSPORT_TYPE, CSV_PATH
-from homework.patient import PatientCollection, Patient
+from homework.config import PASSPORT_TYPE, TABLE
+from homework.patient import PatientCollection, Patient, db_request
 from tests.constants import PATIENT_FIELDS
 
 GOOD_PARAMS = (
@@ -25,26 +25,25 @@ GOOD_PARAMS = (
 
 @pytest.fixture()
 def prepare():
-    with open(CSV_PATH, 'w', encoding='utf-8') as f:
-        f.write('')
+    db_request("truncate ill_patients")
     for params in GOOD_PARAMS:
         Patient(*params).save()
     yield
-    os.remove(CSV_PATH)
 
 
 @pytest.mark.usefixtures('prepare')
 def test_collection_iteration():
-    collection = PatientCollection(CSV_PATH)
+    collection = PatientCollection(TABLE)
     for i, patient in enumerate(collection):
         true_patient = Patient(*GOOD_PARAMS[i])
         for field in PATIENT_FIELDS:
             assert getattr(patient, field) == getattr(true_patient, field), f"Wrong attr {field} for {GOOD_PARAMS[i]}"
 
 
+
 @pytest.mark.usefixtures('prepare')
 def test_limit_usual():
-    collection = PatientCollection(CSV_PATH)
+    collection = PatientCollection(TABLE)
     try:
         len(collection.limit(8))
         assert False, "Iterator should not have __len__ method"
@@ -56,9 +55,10 @@ def test_limit_usual():
             assert getattr(patient, field) == getattr(true_patient, field), f"Wrong attr {field} for {GOOD_PARAMS[i]} in limit"
 
 
+
 @pytest.mark.usefixtures('prepare')
 def test_limit_add_record():
-    collection = PatientCollection(CSV_PATH)
+    collection = PatientCollection(TABLE)
     limit = collection.limit(len(GOOD_PARAMS) + 10)
     for _ in range(len(GOOD_PARAMS)):
         next(limit)
@@ -71,8 +71,8 @@ def test_limit_add_record():
 
 @pytest.mark.usefixtures('prepare')
 def test_limit_remove_records():
-    collection = PatientCollection(CSV_PATH)
+    collection = PatientCollection("patients")
     limit = collection.limit(4)
-    with open(CSV_PATH, 'w', encoding='utf-8') as f:
-        f.write('')
+    db_request("truncate patients")
+    a = [_ for _ in limit]
     assert len([_ for _ in limit]) == 0, "Limit works wrong for empty file"
