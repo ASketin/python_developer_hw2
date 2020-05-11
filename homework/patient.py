@@ -7,7 +7,6 @@ import logging
 from homework.logger import logger_error, logger_info, handler, handler_error
 from homework.db_config import config
 
-
 # лучше вместо глобальных констант, создать структуры с интерфейсом
 # обновления элементов и форматов
 from tests.constants import PATIENT_FIELDS
@@ -26,35 +25,37 @@ DOC_TYPE = {"паспорт": 10, "заграничный паспорт": 9,
 INAPROPRIATE_SYMBOLS = r"[a-zA-Z\u0400-\u04FF.!@?#$%&:;*\,\;\=[\\\]\^_{|}<>]"
 
 
-def my_logging_decorator(method):
-    def method_wrapper(*args):
+def my_logging_decorator(parameter):
+    def new_decorator(method):
+        def method_wrapper(*args):
+            msg = None
 
-        exist = False
-        result = None
+            if parameter == "linked":
+                method(*args)
+                logger_info.info(f"Patient was {method.__name__}")
 
-        if method.__name__ == "__set__":
-            if args[0]._name in args[1].__dict__:
-                exist = True
+            else:
 
-        if method.__name__ == "__init__":
-            result = method(*args)
-            logger_info.info(f"Patient was {method.__name__}")
+                if parameter == "set":
+                    Descriptor, Patient = args[0], args[1]
+                    if Descriptor._name in Patient.__dict__:
+                        msg = f"{Descriptor._name} was changed"
 
-        else:
-            try:
-                result = method(*args)
-                if exist:
-                    logger_info.info(f"{args[0]._name} was changed")
-                if method.__name__ == "save":
-                    logger_info.info(f"Patient was {method.__name__}")
-            except (TypeError, ValueError, AttributeError, psycopg2.DatabaseError,
-                    Exception) as e:
-                logger_error.error(e)
-                raise e
+                if parameter == "unlinked":
+                    msg = f"Patient was {method.__name__}"
 
-        return result
+                try:
+                    result = method(*args)
+                    if msg is not None:
+                        logger_info.info(msg)
+                    return result
+                except Exception as e:
+                    logger_error.error(e)
+                    raise e
 
-    return method_wrapper
+        return method_wrapper
+
+    return new_decorator
 
 
 def db_request(request, amount=None, db="patients"):
@@ -105,7 +106,7 @@ class StringDescriptor(BaseDescriptor):
         символов
     """
 
-    @my_logging_decorator
+    @my_logging_decorator("set")
     def __set__(self, instance, value):
         self.check_type(value)
         if self.check_name(value):
@@ -129,7 +130,7 @@ class DateDescriptor(BaseDescriptor):
        Исключения логгируем в errors
     """
 
-    @my_logging_decorator
+    @my_logging_decorator("set")
     def __set__(self, instance, value):
         self.check_type(value)
         if self.check_date(value):
@@ -154,7 +155,7 @@ class PhoneDescriptor(BaseDescriptor):
         Исключения логгируем в errors
     """
 
-    @my_logging_decorator
+    @my_logging_decorator("set")
     def __set__(self, instance, value):
         number = self.check_phone(value)
         if number is not None:
@@ -182,7 +183,7 @@ class DocDescriptor(BaseDescriptor):
         Содержит проверку для обоих полей
     """
 
-    @my_logging_decorator
+    @my_logging_decorator("set")
     def __set__(self, instance, value):
 
         if self._name == "document_id":
@@ -251,7 +252,7 @@ class Patient:
     database = "patients"
     table = "ill_patients"
 
-    @my_logging_decorator
+    @my_logging_decorator("linked")
     def __init__(self, first_name, last_name, birth_date,
                  phone, document_type, document_id: str):
         self.first_name = first_name
@@ -267,7 +268,7 @@ class Patient:
         return Patient(first_name, last_name, birth_date, phone,
                        document_type, document_id)
 
-    @my_logging_decorator
+    @my_logging_decorator("unlinked")
     def save(self):
         data = [self.first_name, self.last_name, self.birth_date.date(),
                 self.phone, self.document_type, self.document_id]
@@ -320,10 +321,10 @@ class PatientCollection:
     def __init__(self, table):
         self.table = table
 
-    @my_logging_decorator
+    @my_logging_decorator("unlinked")
     def __iter__(self):
         return CollectionIterator(self.table)
 
-    @my_logging_decorator
+    @my_logging_decorator("unlinked")
     def limit(self, n):
         return CollectionIterator(self.table, n)
